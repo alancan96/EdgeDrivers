@@ -1,0 +1,47 @@
+name: Check for duplicate profiles
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'drivers/**/profiles/*.yml'
+env:
+  LUA_PATH: /home/runner/work/lua_libs/?.lua;./?.lua;/home/runner/work/lua_libs/?/init.lua;./?/init.lua
+jobs:
+  find-duplicate-profiles:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      # Creates file "$/files.csv", among others
+      - id: file_changes
+        name: Gather file changes
+        uses: trilom/file-changes-action@1.2.3
+        with:
+          output: ','
+          fileOutput: ','
+
+      # For verification
+      - name: Show files changed
+        run: |
+          cat $HOME/files.csv
+
+      - name: Test python script
+        run: |
+          python ./.github/scripts/check_duplicates.py
+
+      # - name: Create comment
+      #   uses: peter-evans/create-or-update-comment@v2
+      #   with:
+      #     body-file: 'comment-body.md'
+
+      - name: Post comment
+        uses: peter-evans/create-or-update-comment@v2
+        with:
+          body-file: 'profile-comment-body.md'
+          edit-mode: replace
+          issue-number: ${{ github.event.number }}
+
+
+# pwd: /home/runner/work/SmartThingsEdgeDrivers/SmartThingsEdgeDrivers
+

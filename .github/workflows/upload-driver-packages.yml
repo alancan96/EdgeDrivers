@@ -1,9 +1,9 @@
 name: Upload driver packages
 on:
-  pull_request:
-    types: [opened, synchronize]
-    paths:
-      - 'drivers/**'
+  # pull_request:
+  #   types: [opened, synchronize]
+  #   paths:
+  #     - 'drivers/**'
 jobs:
   find-changed-drivers:
     runs-on: ubuntu-latest
