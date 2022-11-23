@@ -16,6 +16,7 @@ local capabilities = require "st.capabilities"
 local clusters = require "st.matter.clusters"
 local MatterDriver = require "st.matter.driver"
 local utils = require "st.utils"
+local MediaPlaybackClusterAcceptedCommandList = clusters.MediaPlayback.attributes.AcceptedCommandList
 
 local VOLUME_STEP = 5
 
@@ -25,6 +26,9 @@ end
 
 local configure_handler = function(self, device)
   local variable_speed_eps = device:get_endpoints(clusters.MediaPlayback.ID, {feature_bitmap = clusters.MediaPlayback.types.MediaPlaybackFeature.VARIABLE_SPEED})
+  local media_playback_eps = device:get_endpoints(clusters.MediaPlayback.ID)
+
+  device:send(MediaPlaybackClusterAcceptedCommandList:read(device, media_playback_eps[1]))
 
   if #variable_speed_eps > 0 then
     device:emit_event(capabilities.mediaPlayback.supportedPlaybackCommands({
@@ -42,11 +46,7 @@ local configure_handler = function(self, device)
     }))
   end
 
-
-  device:emit_event(capabilities.mediaTrackControl.supportedTrackControlCommands({
-    capabilities.mediaTrackControl.commands.previousTrack.NAME,
-    capabilities.mediaTrackControl.commands.nextTrack.NAME,
-  }))
+  -- TODO: when to emit supported commands for MediaTrackControl?
 
   device:emit_event(capabilities.keypadInput.supportedKeyCodes({
     "UP",
@@ -70,6 +70,7 @@ local configure_handler = function(self, device)
     "NUMBER8",
     "NUMBER9",
   }))
+
 end
 
 local function on_off_attr_handler(driver, device, ib, response)
@@ -109,6 +110,29 @@ local function media_playback_state_attr_handler(driver, device, ib, response)
     device:emit_event_for_endpoint(ib.endpoint_id, CURRENT_STATE[ib.data.value])
   else
     device:emit_event_for_endpoint(ib.endpoint_id, CURRENT_STATE[CurrentState.NOT_PLAYING])
+  end
+end
+
+local function accepted_command_list_attr_handler(driver, device, ib, response)
+  for _, accepted_command_id in ipairs (ib.data.elements or {}) do
+    local new_profile = "media-video-player"
+    -- TODO: do you think it is safe to just check for the "Next" command? Or both/either?
+    if accepted_command_id.value == clusters.MediaPlayback.commands.Next.ID then
+      if device:supports_capability(capabilities.audioMute, device:endpoint_to_component(ib.endpoint_id)) then
+        new_profile = new_profile .. "-speaker"
+      end
+      new_profile = new_profile .. "-track-control"
+
+      device.log.info(string.format("Updating device profile to %s.", new_profile))
+      device:try_update_metadata({profile = new_profile})
+
+      -- TODO: Should this be moved here or no? Should this event be emitted somewhere else now?
+      -- device:emit_event(capabilities.mediaTrackControl.supportedTrackControlCommands({
+      -- capabilities.mediaTrackControl.commands.previousTrack.NAME,
+      -- capabilities.mediaTrackControl.commands.nextTrack.NAME,
+      -- }))
+      return
+    end
   end
 end
 
@@ -208,6 +232,7 @@ local matter_driver_template = {
       },
       [clusters.MediaPlayback.ID] = {
         [clusters.MediaPlayback.attributes.CurrentState.ID] = media_playback_state_attr_handler,
+        [MediaPlaybackClusterAcceptedCommandList.ID] = accepted_command_list_attr_handler
       }
     },
   },
